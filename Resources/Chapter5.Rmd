@@ -1,0 +1,239 @@
+---
+title: "Chapter 5"
+author: "Mary Lesperance"
+date: "September 24, 2018"
+geometry:  margin=2in
+output:
+  html_document:
+    number_sections: yes
+    toc: yes
+  word_document:
+    toc: yes
+  pdf_document:
+    toc: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, fig.height=5, fig.width=6.5)
+```
+
+```{r}
+# install.packages("asaur")  # this must be done once
+library(survival)
+library(asaur)
+library(numDeriv)
+library(rms)
+library(tableone)
+```
+
+# Section 5.2, simple example, data from Section 4.1
+
+## Figure 5.1
+
+```{r}  
+tt <- c(6, 7, 10, 15, 19, 25)
+delta <- c(1, 0, 1, 1, 0, 1)
+trt <- c(0, 0, 1, 0, 1, 1)
+
+plsimple <- function(beta) {#log partial likelihood
+  psi <- exp(beta)
+  result <- log(psi) - log(3*psi + 3) - log(3*psi + 1) - log(2*psi + 1)
+  result
+  }
+
+beta.vec <- ((-200):50) / 50
+plikel.vec <- plsimple(beta.vec)
+
+plot(plikel.vec ~ beta.vec, type="l", xlab=expression(beta), 
+     ylab="log partial likelihood")
+title('Log Partial Likelihood, Fig 5.1')
+
+#Find MLE:  this method allows for constraints
+result <- optim(par=0, fn = plsimple, method = "L-BFGS-B",   
+                control=list(fnscale = -1), lower = -3, upper = 1)
+result$par
+abline(v=result$par, lty=2, col='blue')
+abline(v=0, lty=2, col='red')
+```
+
+
+
+
+# Section 5.3  Three types of tests
+
+```{r}
+beta.hat <- result$par
+beta.hat  #hazard ratio
+exp(beta.hat)
+plmax <- plsimple(beta.hat)
+plmax
+
+# the text changed variable names
+status <- delta
+grp <- trt
+
+# Fit a Cox Prop Hazards model
+result.cox <- coxph(Surv(tt, status) ~ grp)
+
+summary(result.cox)
+logLik(result.cox)
+coef(result.cox)
+```
+
+## Interpret the results
+Hazard of death for treated is `r round(exp(beta.hat), 3)` times that for control.
+However, the confidence interval for the hazard ratio
+is (`r round(summary(result.cox)$conf.int[,3:4], 3)`), 
+which does include 1, indicating that this result is
+not significant.
+
+
+
+## Other outputs
+Rsquare = reflects the improvement in the fit of the model with the covariate
+compared with a model having no covariates (null model).  Bigger is better.
+
+Concordance = C-Statistics = Harrell's C = measure of the predictive
+discrimination of a covariate.  It lies between 0 and 1, and the bigger,
+the better.
+
+
+## Wald test
+
+```{r}
+#install.packages("numDeriv")    # must be done once
+#library(numDeriv)   
+
+beta.hess <- hessian(func=plsimple, x=result$par)
+beta.hess
+beta.se <- 1 / sqrt(-beta.hess)  # standard error
+beta.se
+
+
+#wald <- result$par*sqrt(-hessian(func=plsimple, x=result$par))
+wald <- beta.hat / beta.se
+wald   # Wald test
+2 * pnorm(abs(wald), lower.tail=F)   #since only 1 parameter, use N(0,1)
+
+pchisq(wald^2, 1, lower.tail=F)     #general case uses chi-square(#param)
+
+
+sqrt(result.cox$wald.test)  # compare to model output
+```
+
+
+## Likelihood ratio test
+
+```{r}
+
+beta.lr <- 2 * (plsimple(beta.hat) - plsimple(0))   # likelihood ratio test
+beta.lr
+pchisq(beta.lr, 1, lower.tail=F)     #general case uses chi-square(#param)
+```
+
+
+## Score test
+
+```{r}
+beta.gr0 <- grad(func=plsimple, x=0)
+beta.gr0
+beta.hess0 <- hessian(func=plsimple, x=0)
+beta.hess0
+score.test <- beta.gr0^2 / (-beta.hess0)
+score.test
+
+pchisq(score.test, df=1, lower.tail=F) # score test
+
+
+survdiff(Surv(tt, status) ~ grp)
+
+
+```
+
+
+# The pharmaco Smoking example in the library(asaur)
+## Fit two Cox models and compare survival curves
+
+```{r}
+#?pharmacoSmoking
+#library(asaur)
+#library(survival)
+summary(pharmacoSmoking)
+phvars <- names(pharmacoSmoking)
+phvars <- phvars[!is.element(phvars, c('id','grp'))]
+phvars
+
+#library(tableone)
+# You will find a Table 1, similar to this, is most medical papers.
+print(CreateTableOne(phvars, c('grp'), data=pharmacoSmoking),
+         showAllLevels=TRUE)
+
+
+pharmaco.cox1 <- coxph(Surv(ttr,relapse) ~ grp, data=pharmacoSmoking)
+summary(pharmaco.cox1)
+AIC(pharmaco.cox1)
+L1 <- logLik(pharmaco.cox1)
+L1
+2*(-L1 + 1)  #same as AIC
+
+ph.newdat1 <- data.frame(grp=levels(pharmacoSmoking$grp))
+ph.newdat1
+plot(survfit(pharmaco.cox1, newdata=ph.newdat1),
+     lty=1:2, col=1:2, ylab='Survival Prob', xlab='days')
+legend('topright', levels(pharmacoSmoking$grp), lty=1:2,
+       col=1:2, bty='n')
+title('Relapse-free survival, Pharmaco Smoking data')
+
+
+pharmaco.cox2 <- coxph(Surv(ttr,relapse) ~ grp + ageGroup2 + gender + levelSmoking,
+                       data=pharmacoSmoking)
+summary(pharmaco.cox2)
+AIC(pharmaco.cox2)
+ph.newdat2 <- data.frame(grp=levels(pharmacoSmoking$grp),
+                        ageGroup2='21-49', gender='Female', levelSmoking='heavy')
+plot(survfit(pharmaco.cox2, newdata=ph.newdat2),
+     lty=1:2, col=1:2, ylab='Survival Prob', xlab='days')
+legend('topright', levels(pharmacoSmoking$grp), lty=1:2,
+       col=1:2, bty='n')
+title('Relapse-free survival, Female, 21-49, heavy')
+L2 <- logLik(pharmaco.cox2)
+L2
+
+L2-L1
+pchisq(2*(L2-L1), 3, lower.tail = FALSE)
+
+anova(pharmaco.cox1, pharmaco.cox2)
+
+
+```
+
+
+
+
+
+# The pharmaco Smoking example using library(rms) and cph
+## Compare survival curves for the pharmaco Smoking example
+
+```{r}
+#install.packages("rms")
+#library(rms)
+dd <- datadist(pharmacoSmoking)
+options(datadist='dd')
+
+pharmaco.cph1 <- cph(Surv(ttr,relapse) ~ grp, data=pharmacoSmoking,
+                      x=TRUE, y=TRUE)
+summary(pharmaco.cph1)
+survplot(pharmaco.cph1)
+
+pharmaco.cph2 <- cph(Surv(ttr,relapse) ~ grp + ageGroup2 + gender + levelSmoking,
+                       data=pharmacoSmoking, x=TRUE, y=TRUE)
+summary(pharmaco.cph2)
+survplot(pharmaco.cph2, grp, col=1:2)
+title('Relapse-free survival, Female, 21-49, heavy')
+
+options(datadist=NULL)
+```
+
+
+
+

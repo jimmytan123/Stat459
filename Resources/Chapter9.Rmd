@@ -1,0 +1,262 @@
+---
+title: "Chapter 9"
+author: "Mary Lesperance"
+date: '`r Sys.Date()`'
+output:
+  html_document:
+    number_sections: yes
+    toc: yes
+    toc_depth: 3
+  pdf_document:
+    toc: yes
+    toc_depth: 3
+  word_document:
+    toc: yes
+    toc_depth: 3
+geometry: margin=.75in
+fontsize:  11pt
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, fig.height=5, fig.width=6.5)
+```
+
+# Section 9.2.1 competing risks   # prostateSurvival is in "asaur" package
+
+```{r Compete}
+library(survival)
+library(asaur)
+#install.packages(c("mstate", "cmprsk")) # must be done once
+library(mstate)
+library(cmprsk)
+
+summary(prostateSurvival)
+
+#Two outcomes
+#status =1 (death due to prostate cancer), =2 (death due to other cause)
+prostateSurvival <- within(prostateSurvival, {
+   status.prost <- as.numeric({status == 1}) 
+   status.other <- as.numeric({status == 2})}) 
+ls()   #these variables are not in the workspace
+summary(prostateSurvival)
+
+#attach(prostateSurvival)
+
+#Choose high risk patients
+prostateSurvival.highrisk <- subset(prostateSurvival, {{grade == "poor"} & 
+   {stage=="T2"} & {ageGroup == "80+"}})
+head(prostateSurvival.highrisk) 
+
+#Compare survival prob estimates for 2 causes of death
+result.prostate.km <- survfit(Surv(survTime, event=status.prost) ~ 1,
+    data=prostateSurvival.highrisk)
+result.other.km <- survfit(Surv(survTime, event=status.other) ~ 1,
+    data=prostateSurvival.highrisk) 
+
+attributes(result.prostate.km)
+
+surv.other.km <- result.other.km$surv #S(t)
+cumDist.other.km <- 1 - surv.other.km   #F(t)=1-S(t)
+surv.prost.km <- result.prostate.km$surv  #S(t)
+cumDist.prost.km <- 1- surv.prost.km  #F(t)=1-S(t)
+time.km <- result.other.km$time / 12   #time is in months
+
+#Plot F(t) cdf estimates versus time
+plot(cumDist.prost.km ~ time.km, type="s", ylim=c(0,1),  
+    xlab="Years from prostate cancer diagnosis",  
+    ylab='probabilities', col=1, lty=1) 
+lines(cumDist.other.km ~ time.km, type="s", col=2, lty=2) 
+legend('topleft',c('Prostate Death, 1-km','Other Death, 1-km'),
+       col=1:2, lty=1:2, bty='n')
+title('Figure 9.1b')
+
+#summary(result.prostate.km,c(119))  #almost 10-year survival probability
+
+#F(t) Probability of events by 119 months
+1 - summary(result.prostate.km,c(119))$surv   #almost 10-year probabilities
+1 - summary(result.other.km,c(119))$surv
+
+#These are mutually exclusive events, but(!) probs sum to >1
+```
+
+```{r}
+# Figure 9.1  - see text for description
+plot(cumDist.prost.km ~ time.km, type="s", ylim=c(0,1),  
+    xlab="Years from prostate cancer diagnosis",  
+    ylab='probabilities', col=1, lty=1) 
+lines(surv.other.km ~ time.km, type="s", col=2, lty=2) 
+legend('topright',c('Prostate Death, 1-km','Other Death, km'),
+       col=1:2, lty=1:2, bty='n')
+title('Figure 9.1')
+
+#detach(prostateSurvival)
+```
+
+# Section 9.2.2 cause-specific hazards and cumulative incidence functions
+
+```{r cause-specific}
+#Simple example
+tt <- c(2,7,5,3,4,6)
+status <- c(1,2,1,2,0,0) #two causes of death, 1 and 2
+status.any <- as.numeric(status >= 1) 
+result.any <- survfit(Surv(tt, status.any) ~ 1) #overall survival function
+summary(result.any) 
+result.any$surv
+
+
+#install.packages("mstate") # must be done once
+#library(mstate)
+
+#Cuminc computes cumulative incidence
+
+simple.ci <- Cuminc(time=tt, status=status, failcodes=1:2)
+simple.ci
+
+
+
+## Aside FYI
+#create same table using survfit adn type="mstate"
+simple.survmstate  <- survfit(Surv(tt, status, type="mstate") ~ 1)
+simple.survmstate.sum <- summary(simple.survmstate)
+simple.survmstate.sum
+attributes(simple.survmstate.sum)
+
+# bind table
+simple.ci2 <- cbind(time=simple.survmstate.sum$time, n.risk=simple.survmstate.sum$n.risk[,3],
+            simple.survmstate.sum$pstate, simple.survmstate.sum$std.err)
+colnames(simple.ci2)[-(1:2)] <- c('CI.1','CI.2','Surv','seCI.1','seCI.2','seSurv')
+simple.ci2
+
+
+```
+
+
+
+## Figure 9.4  
+
+```{r fig9_4}
+# Prostate cancer data competing risks analysis compared with km
+
+summary(prostateSurvival.highrisk)
+
+#frequencies for each competing risk
+summary(factor(prostateSurvival.highrisk$status))
+
+# Cuminc results using survfit and type="mstate" 
+pros.sf <- summary(survfit(Surv(survTime, status, type="mstate") ~ 1, 
+                      data=prostateSurvival.highrisk))
+
+attributes(pros.sf)
+pros.times <- pros.sf$time/12
+pros.CIs <- pros.sf$pstate  
+
+pros.ci1 <- pros.CIs[,1]  #ci for prostate
+pros.ci2 <- pros.CIs[,2]  #ci for other
+
+pros.Cci2 <- 1 - pros.ci2  #complement of ci2
+
+#This graph is in textbook
+plot(pros.Cci2 ~ pros.times, type="s", ylim=c(0,1), lwd=2, col=1, lty=1,
+    xlab="Time in years", ylab="Survival probability",
+    xlim=c(0,10))
+lines(pros.ci1 ~ pros.times, type="s", lwd=2, col=2, lty=1) 
+lines(surv.other.km ~ time.km, type="s", col=1, lwd=1, lty=2)
+lines(cumDist.prost.km ~ time.km, type="s", col=2, lwd=1, lty=2) 
+legend('topright', c('1-ci other','ci prostate','km other','1-km prostate'),
+       col=c(1,2,1,2), lty=c(1,1,2,2), lwd=c(2,2,1,1), bty='n')
+title('Comparison cumulative incidence and KM')
+
+```
+
+
+
+## Figure 9.5 - these are not stacked curves as in the book  
+
+We compare the cumulative incidence curves for the two competing risks.
+This graph is not in textbook.
+
+```{r fig9_5}
+plot(survfit(Surv(survTime, status, type="mstate") ~ 1,  
+             data=prostateSurvival.highrisk), lty=1:2, col=1:2,  ylim=c(0,1),
+             xscale=12, xlab="Time in years", ylab="Survival probability")         
+            
+title('Cumulative incidence functions')    
+legend('topleft', c('Prostate cancer', 'Other causes'), lty=1:2, col=1:2, bty='n' )
+
+```
+
+
+# Section 9.2.4 regression methods for cause-specific hazards (Fine and Gray)
+
+I recommend crr method for regression modelling of competing risks.
+
+```{r crr_reg}
+prostateSurvival.T2 <- prostateSurvival[prostateSurvival$stage=="T2",]
+summary(prostateSurvival.T2)
+
+#attach(prostateSurvival.T2)
+
+#Putter etc. simply treat competing risk as censored
+prostate.cox <- coxph(Surv(survTime, status.prost) ~ grade + ageGroup,
+                         data=prostateSurvival.T2)
+summary(prostate.cox) 
+
+other.cox <- coxph(Surv(survTime, status.other) ~ grade + ageGroup,
+                       data=prostateSurvival.T2)
+summary(other.cox) 
+
+#install.packages("cmprsk") # must be done once
+#library(cmprsk)
+#proportional subdistribution hazards regression model described in Fine and Gray (1999)
+
+#cmprsk package does not support formula - you need to supply covariate matrix
+cov.matrix <- model.matrix(~ grade + ageGroup, data=prostateSurvival.T2)
+head(cov.matrix)
+
+#crr does not have the data option, use with()
+#Compare covariate effects on sub-hazards for the two competing risks.
+result.prostate.crr <-with(prostateSurvival.T2,  crr(survTime, status, 
+                  cov1=cov.matrix[,-1], failcode=1))
+summary(result.prostate.crr)
+
+result.other.crr <- with(prostateSurvival.T2, crr(survTime, status, 
+                  cov1=cov.matrix[,-1], failcode=2) )
+summary(result.other.crr)
+
+```
+
+
+
+# Section 9.2.5 Covariates on different causes of death
+
+Here a several models that use multi-state set-up for the analysis of
+competing risks.  See textbook for discussion.
+
+```{r Covar_Cause}
+library(mstate)
+tmat <- trans.comprisk(2, names = c("event-free", "prostate", "other"))
+tmat
+
+prostate.long <- with(prostateSurvival.T2, msprep(time = cbind(NA, survTime, survTime), 
+      status = cbind(NA, status.prost, status.other),  
+      keep = data.frame(grade, ageGroup), trans = tmat))
+
+head(prostate.long) ; head(prostateSurvival.T2)
+events(prostate.long) 
+
+summary(coxph(Surv(time, status) ~ grade + ageGroup, data=prostate.long, 
+              subset={trans==1}))
+summary(coxph(Surv(time, status) ~ grade + ageGroup, data=prostate.long, 
+              subset={trans==2}))
+
+#model assumes grade acts same on prostate and other causes
+summary(coxph(Surv(time, status) ~ grade + ageGroup + strata(trans), data=prostate.long))
+
+#grade acts differently
+summary(coxph(Surv(time, status) ~ grade*factor(trans) + ageGroup + strata(trans), data=prostate.long))  
+
+#grade and age act differently
+summary(coxph(Surv(time, status) ~ (grade + ageGroup)*trans + ageGroup + strata(trans), data=prostate.long)) 
+
+
+```

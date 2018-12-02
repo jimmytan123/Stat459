@@ -1,0 +1,138 @@
+---
+title: "Chapter 3 - Nonparametric Survival Curve Estimation"
+author: "Mary Lesperance"
+date: "September 17, 2018"
+output:
+  html_document:
+    toc: yes
+  pdf_document:
+    toc: yes
+  word_document:
+    toc: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, fig.height=5, fig.width=6.5)
+```
+
+# Nonparametric estimation of the Survival Curve
+
+```{r KMcurve}
+library(survival)
+tt <- c(7,6,6,5,2,4)
+cens <- c(0,1,0,0,1,1)
+Surv(tt, cens)
+result.km <- survfit(Surv(tt, cens) ~ 1, conf.type="log-log")
+result.km  #typo in book Table 3.1
+summary(result.km)
+plot(result.km)
+title('Kaplan-Meier curve example')
+
+abline(h=.5, col="red")
+
+result.linear.km<- survfit(Surv(tt, cens) ~ 1, conf.type="plain")
+result.linear.km  
+summary(result.linear.km  )
+
+```
+
+# Nelson-Aalen estimate (Fleming-Harrington)
+
+```{r}
+result.fh <- survfit(Surv(tt, cens) ~ 1, conf.type="log-log",
+            type="fh")
+summary(result.fh)
+
+```
+
+# Example 1.2: gastricXelox
+
+We now consider data from an actual clinical trial. The data set 'gastricXelox'
+is a Phase II (single sample) clinical trial of the chemotherapeutic agent Xelox
+administered to patients with advanced gastric cancer prior to surgery (Wang
+et al. [74]). The primary outcome of interest is 'progression-free survival.' This
+quantity is defined as the time from entry into a clinical trial until progression or
+death, whichever comes first. The survival data set was extracted from the paper,
+and the survival times rounded to the nearest week. The product-limit estimator
+may be estimated and plotted as follows, after converting the time scale from weeks
+to months.
+
+```{r gastric}
+library(asaur)
+timeMonths <- gastricXelox$timeWeeks*7/30.25   #I would use 365.25/12=30.4375 instead of 30.25
+delta <- gastricXelox$delta
+gastric.km <- survfit(Surv(timeMonths, delta) ~ 1,
+      conf.type="log-log")
+plot(gastric.km, conf.int=T, mark="|", xlab="Time in months",
+   ylab="Survival probability")
+title("Progression-free Survival in Gastric Cancer Patients")
+abline(h=.5,col=2)
+
+
+
+```
+
+
+# Median survival and confidence interval
+
+```{r KMmedian}
+gastric.km
+
+summary(gastric.km, c(12, 24, 36))
+```
+
+# Median follow-up time
+
+One measure of the quality of a clinical trial is the duration of follow-up, as
+measured by the median follow-up time. This is a measure that captures how
+long, on average, patients have been followed.
+
+A simple definition is to consider all of the survival times, whether
+censored or not, and find the median. A disadvantage of this is that a trial with
+many early deaths, but a long observation period, would appear not to have a long
+median follow-up time. A perhaps better way of looking at median survival is the
+'potential' median survival. To obtain this estimate, one first switches the censoring
+and death indicators, so that a “censored” observation is the “event”, while a death
+is viewed as a censored observation, in the sense that the observation time would
+have been much longer had the patient not died. One then computes the Kaplan-
+Meier “survival” estimate using these reversed censoring indicators, and finds the
+median survival, as discussed in the previous section. This method is also known as
+the “reverse” Kaplan-Meier [59].
+Most clinicians with whom I have worked ask for both meaures of follow-up time.
+
+```{r}
+delta.followup <- 1 - delta
+survfit(Surv(timeMonths, delta.followup) ~ 1)
+
+median(timeMonths)
+```
+
+# Hazard estimation
+
+Estimates of the cumulative hazard can be used for two purposes:
+1.  To assist with the selection of an appropriate 
+parametric model;
+2.  Crude estimates of the hazard rates can be obtained from
+the slope of the cumulative hazard function.
+
+```{r}
+plot(gastric.km, conf.int=T, mark="|", xlab="Time in months",
+   fun="cumhaz", ylab="Cumulative hazard" )
+title("Cumulative hazard in Gastric Cancer Patients")
+
+gastric.fh <- survfit(Surv(timeMonths, delta) ~ 1,   #Fleming-Harrington
+      conf.type="log-log", type='fh')
+plot(gastric.fh, conf.int=T, mark="|", xlab="Time in months",
+   fun="cumhaz",ylab="Cumulative hazard")
+title("Cumulative hazard (fh) in Gastric Cancer Patients")
+
+# plot the two types on one graph
+plot(gastric.km, conf.int=F, mark="|", xlab="Time in months",
+   fun="cumhaz", ylab="Cumulative hazard" )
+lines(gastric.fh, conf.int=F, mark="|", xlab="Time in months",
+   fun="cumhaz",ylab="Cumulative hazard", col=2, lty=2)
+legend("bottomright",c("KM","fm"),col=1:2,lty=1:2)
+title("Two types of Cumulative hazards, Gastric Cancer patients")
+
+```
+

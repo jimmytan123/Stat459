@@ -1,0 +1,125 @@
+---
+title: "Chapter 1"
+author: "Mary Lesperance"
+date: "September 6, 2018"
+output:
+  word_document:
+    toc: yes
+  pdf_document:
+    toc: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+summary(cars)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+
+
+## Chapter 1 R code 
+### Example 1.2 Xelox in patients with advanced gastric cancer.
+
+This is a Phase II (single sample) clinical trial of Xeloda and oxaliplatin (XELOX)
+chemotherapy given before surgery to 48 advanced gastric cancer patients with paraaortic
+lymph node metastasis (Wang et al. [74]). An important survival outcome of
+interest is progression-free survival, which is the time from entry into the clinical
+trial until progression or death, whichever comes first. The data, which have been
+extracted from the paper, are in the data set “gastricXelox” in the “asaur” package;
+a sample of the observations (for patients 23 through 27) are as follows:
+
+
+```{r}
+library (asaur)
+gastricXelox[23:27,]
+```
+
+### Example 1.3 Pancreatic cancer in patients with locally advanced disease
+
+This is also a single sample Phase II study of a chemotherapeutic compound, and
+the main purpose was to assess overall survival and also “progression-free survival”,
+which is defined as the time from entry into the trial until disease progression
+or death, whichever comes first. A secondary interest in the study is to compare
+the prognosis of patients with locally advanced disease as compared to metastatic
+disease. The results were published in Moss et al. [51] The data are available in the
+data set “pancreatic” in the “asaur” package. Here are the first few observations:
+
+
+```{r}
+head(pancreatic)
+```
+
+### Example 1.4 Survival prospects of prostate cancer patients with high-risk disease
+
+In this data set there are two outcomes of interest, death from prostate cancer and
+death from other causes, so we have what is called a competing risks survival
+analysis problem. In this example, we have simulated data from 14,294 prostate
+cancer patients based on detailed competing risks analyses published by Lu-Yao
+et al. [46]. For each patient we have grade (poorly or moderately differentiated), age
+of diagnosis (66-70, 71-75, 76-80, and 80+), cancer stage ( T1c if screen-diagnosed
+using a prostate-specific antigen blood test, T1ab if clinically diagnosed without
+screening, or T2 if palpable at diagnosis), survival time (days from diagnosis to
+death or date last seen), and an indicator (“status”) for whether the patient died
+of prostate cancer (status = 1), died of some other cause (status = 2), or was
+still alive at the date last seen (status = 0). The simulated data set matches the
+original in the number of patients in each of the two grades, three stages, and four
+age groups (24 categories). For each of the 24 categories, Lu-Yao et al. [46] also
+presented competing risks survival plots for death from prostate cancer and from
+other causes, and these 24 plots were used to simulate the data presented here. Thus,
+the simulated data preserve many of the key characteristics of the original. This data
+set, “prostateSurvival”, is available in the “asaur” package. Here is a list of the data
+for a few patients (88–95):
+
+```{r}
+prostateSurvival[88:95,]
+```
+
+### Example 1.5 Comparison of medical therapies to aid smokers to quit
+
+The purpose of this study (Steinberg et al. [63]) was to evaluate extended duration
+of a triple-medication combination versus therapy with the nicotine patch alone in
+smokers with medical illnesses. Patients with a history of smoking were randomly
+assigned to the triple-combination or patch therapy and followed for up to six
+months. The primary outcome variable was time from randomization until relapse
+(return to smoking); individuals who remained non-smokers for six months were
+censored. The data set, “pharmacoSmoking”, is available in the “asaur” package.
+Here is a listing of a few cases and variables:
+
+
+```{r}
+pharmacoSmoking[1:6, 2:8]
+```
+
+### Example 1.6 Prediction of survival of hepatocellular carcinoma patients using biomarkers
+
+This study (Li et al. [42, 43]) focused on using expression of a chemokind
+known as CXCL17, and other clinical and biomarker factors, to predict overall and
+recurrence-free survival. This example contains data on 227 patients, each with a
+wide range of clinical and biomarker values. The “hepatoCellular” data are publicly
+available in the Dryad online data repository [43] as well as in the “asaur” R package
+that accompanies this text. Here, for illustration, is a small selection of cases and
+covariates.
+
+```{r}
+hepatoCellular[c(1, 2, 3, 65, 71),c(2, 3, 16:20, 24, 47)]
+```
+
+
+

@@ -1,0 +1,374 @@
+---
+title: "Chapter 10"
+author: "Mary Lesperance"
+date: '`r Sys.Date()`'
+output:
+  pdf_document:
+    toc: yes
+    toc_depth: 3
+  html_document:
+    number_sections: yes
+    toc: yes
+    toc_depth: 3
+  word_document:
+    toc: yes
+    toc_depth: 3
+geometry: margin=.75in
+fontsize:  11pt
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, fig.height=5, fig.width=6.5, warning=FALSE)
+```
+
+# Section 10.3.1   Assessing the Weibull distribution
+
+```{r Weibull}
+library(survival)
+library(asaur)
+#install.packages(c("asaur")) # must be done once
+#install.packages("Hmisc")   # must be done once
+library(Hmisc)
+
+#Convert time in weeks to months
+gastricXelox <- within( gastricXelox, timeMonths <-timeWeeks*7/30.25 )
+summary(gastricXelox)
+
+#KM curve
+gas.km <- survfit(Surv(timeMonths, delta) ~ 1, data=gastricXelox)
+
+logLogSurvEst <- log(-log(gas.km$surv)) #log-log(S(t))
+logSurvTime <- log(gas.km$time)  #log(t)
+
+# Fig 10.1 - cloglog SurvTime versus log SurvTime
+plot(logLogSurvEst ~ logSurvTime) 
+title('gastricXelox Cloglog Survival vs Log Time')
+
+#Fit straight line through data
+gas.lm <- lm(logLogSurvEst ~ logSurvTime)
+gas.lm
+
+# intercept estimates -mu/sigma; slope estimates 1/sigma
+abline(gas.lm)
+# the Weibull model is not appropriate
+
+###-------------------
+# Redo for pharmacoSmoking data
+#attach(pharmacoSmoking) 
+summary(pharmacoSmoking)
+#amend one zero time
+pharmacoSmoking <- within(pharmacoSmoking, ttr[ttr == 0]  <- 0.5)
+summary(pharmacoSmoking)
+
+pharma.km <- survfit(Surv(ttr, relapse) ~ 1, data=pharmacoSmoking) 
+
+logLogSurvEst <- log(-log(pharma.km$surv))
+logSurvTime <- log(pharma.km$time)
+pharma.lm <- lm(logLogSurvEst ~ logSurvTime) 
+pharma.lm
+# intercept estimates -mu/sigma; slope estimates 1/sigma
+
+pharma.lm$coef
+sigma.est <- 1 / pharma.lm$coef[2]
+mu.est <- -pharma.lm$coef[1] * sigma.est
+mu.est; sigma.est
+
+# Fig 10.2 - cloglog SurvTime versus log SurvTime
+plot(logLogSurvEst ~ logSurvTime) 
+abline(pharma.lm)
+title('pharmacoSmoking Cloglog Survival vs Log Time')
+# the Weibull model appears to be a good fit
+
+```
+
+
+# Section 10.3.2   Weibull maximum likelihood
+
+```{r Weibull-max}
+# see log likelihood function in notes
+# par: c(mu, sigma), tt: time, status: event indicator
+# In the (lambda, alpha) parameterization:  mu=-log(lambda), sigma=1/alpha
+logLikWeib <- function(par, tt, status) {
+   mu <- par[1]
+   sigma <- par[2]
+   lambda.p <- exp(-mu)
+   alpha.p <- 1/sigma
+
+   dd <- sum(status)
+   sum.t <- sum(status*log(tt))
+   sum.t.alpha <- sum(tt^alpha.p)
+
+   term.1 <- dd*log(alpha.p) + alpha.p*dd*log(lambda.p)
+   term.2 <- (alpha.p - 1)*sum.t
+   term.3 <- (lambda.p^alpha.p)*sum.t.alpha
+   result <- term.1 + term.2 - term.3
+   result    
+   }
+
+#Find mu.hat, sigma.hat, the MLE's
+#Use mu.est, sigma.est as starting values for MLE's
+pharma.weib <- with(pharmacoSmoking, optim(par=c(mu.est, sigma.est), fn=logLikWeib, method="L-BFGS-B",
+    lower=c(0.001, 0.01), upper=c(5, 5),
+    control=list(fnscale = -1),
+    tt=ttr, status=relapse))  
+pharma.weib$par
+
+#survreg does Weibull regression using log-linear model (AFT model)
+result.survreg.0 <- survreg(Surv(ttr, relapse) ~ 1, dist="weibull", data=pharmacoSmoking)
+summary(result.survreg.0)
+
+
+```
+
+# Section 10.3.3   Profile Weibull likelihood 
+
+ 
+```{r Profile-Weibull}
+#Maximize the log-likelihood over lambda, for a fixed value of alpha
+# The Mle of lambda given alpha is:  (dd/sum.t.alpha)^(1/alpha.p)
+# Substitute this into the log likelihood
+# The result is called the Profile Log Likelihood
+
+logLikWeibProf <- function(par, tt, status) {
+   # find log-likelihood for a particular sigma, using mle for mu
+   sigma <- par
+   alpha.p <- 1/sigma
+   dd <- sum(status)
+   sum.t <- sum(status*log(tt))
+   sum.t.alpha <- sum(tt^alpha.p)
+   lambda.p <- (dd/sum.t.alpha)^(1/alpha.p)
+
+   term.1 <- dd*log(alpha.p) + alpha.p*dd*log(lambda.p)
+   term.2 <- (alpha.p - 1)*sum.t
+   term.3 <- (lambda.p^alpha.p)*sum.t.alpha
+   result <- term.1 + term.2 - term.3
+   result 
+   }
+   
+pharma.Prof <- with(pharmacoSmoking, optim(par=c(sigma.est), fn=logLikWeibProf, method="L-BFGS-B",
+     lower=c(0.01), upper=c(5), control=list(fnscale = -1),
+     tt=ttr, status=relapse) ) 
+sigma.hat <- pharma.Prof$par 
+sigma.hat  
+
+#Compare estimate for mu
+dd <- sum(pharmacoSmoking$relapse)
+alpha.p <- 1/sigma.hat
+sum.t.alpha <- sum(pharmacoSmoking$ttr^alpha.p)
+lambda.p <- (dd/sum.t.alpha)^(1/alpha.p)
+mu.hat <- -log(lambda.p)
+mu.hat 
+
+#Plot profile log-likelihood for a list of sigma values
+sigma.list <- seq(1, 5, length=400)
+n.list <- length(sigma.list)
+logLik.list <- rep(NA, n.list)
+for (i in 1:n.list) {
+  logLik.list[i] <- with(pharmacoSmoking, logLikWeibProf(par=sigma.list[i], ttr, relapse))
+  } 
+
+# Fig. 10.3
+plot(logLik.list ~ sigma.list, type="l", xlab="sigma", 
+   ylab="profile log-likelihood") 
+abline(v=sigma.hat, col="gray")
+title('pharmacoSmoking Profile Log-likelihood for Weibull sigma')
+```
+
+
+
+# Section 10.3.4  Selecting a Weibull distribution - OMIT THIS SECTION 
+   
+
+```{r figSelectWeib}
+# install.packages("Hmisc")   # must be done once
+# library(Hmisc)
+
+#KM curve
+pharma.surv <- survfit(Surv(ttr, relapse) ~ 1, subset={grp =="patchOnly"},
+                       data=pharmacoSmoking)
+pharma.survsum <- summary(pharma.surv, time=c(28, 84))
+
+t.vec=pharma.survsum$time 
+s.vec=pharma.survsum$surv
+cbind(t.vec, s.vec)
+
+#Match 2 points from KM curve with Weibull model
+pharmWeib <- Weibull2(t.vec, s.vec)  #Weibull survival function
+pharmWeib
+
+#Compare distributions, MLE, 2 point and KM
+
+#2 point match
+t.vals <- 1:200
+s.vals <- pharmWeib(t.vals)
+
+#MLE, reparameterize
+pharm.weib.basic <- survreg(Surv(ttr, relapse) ~ 1,
+     dist="weibull", subset={grp =="patchOnly"}, data=pharmacoSmoking )
+mu.hat <- pharm.weib.basic$coefficients
+sigma.hat <- pharm.weib.basic$scale
+lambda.hat <- exp(-mu.hat)      # " 1 / scale"
+alpha.hat <- 1/sigma.hat        # "shape"
+s.mle.vals <- 1 - pweibull(t.vals, shape=alpha.hat, scale=1/lambda.hat)
+
+# Fig. 10.4
+
+plot(pharma.surv, conf.int=F, lwd=2, xlab="Days to relapse",
+   ylab="Survival probability", cex.lab=1.3, cex.axis=1.3)
+lines(s.mle.vals ~ t.vals, col="blue", lwd=2)
+lines(s.vals ~ t.vals, col="red", lwd=2)
+points(t.vec, s.vec, col="red", pch=16, cex=1.5)
+legend("topright", legend=c("Maximum likelihood", "Match at 24 and 84 days"),
+  col=c("blue", "red"), lwd=2)
+
+
+```
+
+
+# Section 10.3.6  Compare accelerated failure times and proportional hazards
+
+```{r AccelFailure}
+#Compare models with one covariate grp
+# Weibull model
+pharma.survreg.grp <- survreg(Surv(ttr, relapse) ~ grp, dist="weibull", 
+                              data=pharmacoSmoking)
+summary(pharma.survreg.grp)
+
+#Plot estimated survival curves using both methods
+#Weibull convert estimates in (mu, sigma) parameterization to (lambda, alpha)
+mu0.hat <- pharma.survreg.grp$coef[1]
+sigma.hat <- pharma.survreg.grp$scale 
+alpha.hat <- 1/sigma.hat 
+lambda0.hat <- exp(-mu0.hat)
+tt.vec <- 0:182 #time vector
+
+#Weibull estimate of S0(t) for the combination group
+surv0.vec <- 1 - pweibull(tt.vec, shape=alpha.hat, scale=1/lambda0.hat)
+
+#Weibull estimate of S(t;z=1) for the patchOnly group
+gamma.hat <- pharma.survreg.grp$coef[2]
+surv1.vec <- surv0.vec^(exp(-gamma.hat/sigma.hat))
+
+#Cox model survival curve estimate for combination/patch
+#Cox model
+pharma.coxph.grp <- coxph(Surv(ttr, relapse) ~ grp, data=pharmacoSmoking)
+summary(pharma.coxph.grp) 
+
+pharma.coxph.Sest <- survfit(pharma.coxph.grp, 
+    newdata=data.frame(list(grp=c("combination","patchOnly"))))
+    
+# Fig. 10.5
+#The Weibull and Cox model estimates are similar
+plot(pharma.coxph.Sest, col=c("red", "black"), xlab="Time in days",
+  ylab="Survival probability", cex.axis=1.5, cex.lab=1.5, lwd=2)
+lines(surv0.vec ~ tt.vec, col="red", lty=2)
+lines(surv1.vec ~ tt.vec, col="black", lty=2)
+legend("topright", legend=c("Cox model combination", "Cox model patch",
+       "Weibull model combination", "Weibull model  patch"),
+       col=c("red", "black", "red", "black"), lty=c(1,1,2,2))
+
+```
+
+
+
+# Section 10.3.7  Weibull model with multiple covariates
+
+
+```{r Weibullcov}
+#Weibull model
+pharma.weib <- survreg(Surv(ttr, relapse) ~ grp + age + employment, dist="weibull",
+                      data=pharmacoSmoking)
+# Negative coefficients imply shorter lifetimes
+summary(pharma.weib)
+
+weib.coef.all <- pharma.weib$coef 
+weib.coef <- weib.coef.all[2:5]
+weib.coef.ph <- -weib.coef/pharma.weib$scale
+
+#Cox model
+pharma.coxph <- coxph(Surv(ttr, relapse) ~ grp + age + employment,
+                     data=pharmacoSmoking )
+summary(pharma.coxph)
+coxph.coef <- pharma.coxph$coef 
+
+#The two models provide similar estimates
+data.frame(weib.coef.ph, coxph.coef)
+```
+
+# Section 10.3.8  Weibull model selection and residual analysis
+```{r Weibdiag}
+#Fit full weibull model
+
+pharma.All.weib <- survreg(Surv(ttr, relapse) ~ grp + gender + 
+                   race + employment + yearsSmoking + levelSmoking +
+                   age + priorAttempts + longestNoSmoke, dist="weibull",
+                   data=pharmacoSmoking) 
+summary(pharma.All.weib)
+
+#Weibull backward model
+pharma.step.weib <- step(pharma.All.weib, direction="backward")
+summary(pharma.step.weib)
+
+pharma.devres <- residuals(pharma.step.weib, type="deviance")
+
+# the following function is from the appendix:
+smoothSEcurve <- function(yy, xx) {
+  # use after a call to "plot"
+  # fit a lowess curve and 95% confidence interval curve
+  xx.list <- min(xx) + ((0:100)/100)*(max(xx) - min(xx)) # make list of x values
+
+  # Then fit loess function through the points (xx, yy) at the listed values
+  yy.xx <- predict(loess(yy ~ xx), se=T, newdata=data.frame(xx=xx.list))
+
+  lines(yy.xx$fit ~ xx.list, lwd=2)
+  lines(yy.xx$fit - qt(0.975, yy.xx$df)*yy.xx$se.fit ~ xx.list, lty=2)
+  lines(yy.xx$fit + qt(0.975, yy.xx$df)*yy.xx$se.fit ~ xx.list, lty=2)
+  }
+
+# Fig. 10.6
+oldpar <- par(mfrow=c(2,2)) 
+plot(pharma.devres  ~ age, data=pharmacoSmoking) 
+smoothSEcurve(pharma.devres, pharmacoSmoking$age) 
+title("Deviance residuals\nversus age")
+
+plot(pharma.devres  ~ grp, data=pharmacoSmoking)   
+title("Deviance residuals\nversus treatment group")
+
+plot(pharma.devres  ~ employment, data=pharmacoSmoking) 
+title("Deviance residuals\nversus employment") 
+
+
+pharma.dfbetas <- residuals(pharma.step.weib, type="dfbetas")
+summary(pharma.dfbetas)
+dimnames(pharma.dfbetas)[[2]] <- c(names(coef(pharma.step.weib)), 'Log(scale)')
+
+n.dfbetas <- nrow(pharma.dfbetas)
+index.obs <- 1:n.dfbetas 
+
+# Fig. 10.7
+summary(pharma.dfbetas)
+plot(pharma.dfbetas[,5] ~ index.obs, type="h",
+   xlab="Observation", ylab="Change in coefficient")
+title('dfbetas for Age')
+abline(h=0)
+
+#identify(resid.dfbeta[,3] ~ index.obs)   # use mouse to click points to identify
+#  press "Esc" key to exit
+par(oldpar)
+
+```
+
+# Section 10.4 Other parametric distributions
+
+```{r}
+#Negative coefficients imply shorter lifetimes
+model.pharm.lognormal <- survreg(Surv(ttr, relapse) ~ grp + age +
+    employment, dist="lognormal", data=pharmacoSmoking)
+summary(model.pharm.lognormal)
+
+model.pharm.loglogistic <- survreg(Surv(ttr, relapse) ~ grp + 
+    age + employment, dist="loglogistic", data=pharmacoSmoking)
+summary(model.pharm.loglogistic)
+
+```
+
