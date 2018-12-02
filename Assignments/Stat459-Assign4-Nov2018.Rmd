@@ -1,0 +1,489 @@
+---
+title: "Assignment 4 - Due Thursday, November 22, 2018"
+author: "Stat 459/559"
+date: "November 1, 2018"
+output:
+  pdf_document:
+    toc: yes
+    toc_depth: 3  
+  html_document:
+    number_sections: yes
+    toc: yes
+  word_document:
+    toc: yes
+geometry: margin=.5in
+fontsize:  11pt
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, fig.height=5, fig.width=6.5)
+```
+
+#0. CNS data
+An observational study was conducted on 58 central nervous system (CNS) lymphoma
+patients.  Group 1 patients (n=19) received cranial radiation prior to chemotherapy.
+Group 0 patients (n=39) received chemotherapy as their initial treatment.
+Tumour response and survival were evaluated, but survival was of
+primary interest.  The variables in the dataset are:
+
+- PtNumber:  patient number
+- Group:  1=prior radiation; 0=no prior radiation
+-  Sex:  1=female; 0=male
+-  Age:  at time of first chemotherapy in years
+-  Status:  1=dead, 0=alive
+-  DxtoB3:  time from diagnosis to chemotherapy in years
+-  DxtoDeath:  time from diagnosis to death in years
+-  B3toDeath:  time from first chemotherapy to death in years
+-  KPS.Pre:  Karnosky performance score, numerical value from 0-100
+-  LesSing:  Lesions; 0=single, 1=multiple
+-  LesDeep:  Lesions:  0=superficial, 1=deep
+-  LesSup:  Lesions;  0-supra, 1=infra, 2=both
+-  Rad4000:  Radiation > 4000; 1=yes, 0=no
+-  Proc:  Procedure; 1=subtotal resection, 2=biopsy, 3=other
+-  ChemoPrior:  1=yes, 0=no
+-  Response:  Tumour response to chemotherapy; 1=complete, 2=partial,
+blank=missing data
+
+#1. Read the data from file CNS.csv into a dataframe called CNS.dat in R.  
+
+**Use this Rmd file to perform your analyses.**   
+
+As in Assignment 3, create new factor variables for the categorical covariates.  
+
+Produce an appropriate Table 1.
+
+
+
+```{r readdata}
+library(survival)
+library(tableone)
+
+#read the data
+CNS.df <- read.csv("CNS.csv")
+
+#add factor variables for the categorical covariates
+CNS.df$GroupF <- factor(CNS.df$Group, levels=c(0,1), 
+                        labels=c('No prior radiation','Prior radiation'))
+CNS.df$SexF <- factor(CNS.df$Sex, levels=c(0,1), labels=c('Male','Female'))
+CNS.df$StatusF <- factor(CNS.df$Status, levels=c(0,1), labels=c('Alive','Death'))
+CNS.df$KPS.PreF <- factor(CNS.df$KPS.Pre)
+CNS.df$LesSingF <- factor(CNS.df$LesSing, levels=c(0,1), labels=c('Single','Multiple'))
+CNS.df$LesDeepF <- factor(CNS.df$LesDeep, levels=c(0,1), labels=c('Superficial','Deep'))
+CNS.df$LesSupF <- factor(CNS.df$LesSup, levels=c(0,1,2), labels=c('Supra','Infra','Both'))
+CNS.df$Rad4000F <- factor(CNS.df$Rad4000, levels=c(0,1), labels=c('No','Yes'))
+CNS.df$ProcF <- factor(CNS.df$Proc, levels=c(1,2,3),
+                       labels=c('Subtotal resection','Biopsy', 'Other'))
+CNS.df$ChemoPriorF <- factor(CNS.df$ChemoPrior, levels=c(0,1), labels=c('No','Yes'))
+CNS.df$ResponseF <- factor(CNS.df$Response, levels=c(1,2), labels=c('Complete','Partial'))
+
+
+```
+
+
+```{r table_one, comment=''}
+CNSvars = c('Age','SexF','StatusF','KPS.Pre','KPS.PreF','LesSingF',
+            'LesDeepF','LesSupF','Rad4000F','ProcF','ChemoPriorF','ResponseF')
+CNS.tb1 <- CreateTableOne(CNSvars, c('GroupF'), data=CNS.df)
+oldop <- options(width=95)
+#produce a table 1
+print(CNS.tb1, showAllLevels = TRUE)
+options(oldop)
+```
+
+The number of patients for no prior radiation group and prior group is not equal. More males are in the study than the females. The group that receive prior radiation are much more probability to death. For radiation greater than 4000, there is no people in no prior radiation group. All of the people in no prior radiation group are in radiation less or equal than 400. For people who in prior radiation group, most of them are radiation greater than 4000. 
+
+P-value for DxtoB3 is small which indicates that the time from diagnosis to chemotherapy exists significant difference between two groups. P-value for SexF is large, which indicates that there exist equal proportions for SexF and two groups. P-value for StatusF and Rad4000F is really small, indicates that there exist not equal proportions for each population in two groups.
+
+
+#2.  Consider the response, B3toDeath.
+
+###(a)  For each reasonable covariate, graph KM curves for B3toDeath with Status as event indicator by levels of the covariate.  (Hint:  continuous covariates will need to be collapsed into categories.  Give your rationale for you choice of categories.)  Comment.
+
+
+```{r}
+#descriptive statistics of the data, find the continuous covariates
+summary(CNS.df)
+
+#let continuous covariates change into categories, use the median of Age to cut into two groups
+CNS.df$AgeF = cut(CNS.df$Age, breaks = c(5-1, 56.5, 71))
+CNS.df$AgeF = factor(CNS.df$AgeF, levels=c("(4,56.5]", "(56.5,71]"), 
+                     labels=c('Age <= 56.5','Age > 56.5'))
+
+#let continuous covariates change into categories, use the median of KPS.Pre to cut into two groups
+CNS.df$KPS.Pre_1 = cut(CNS.df$KPS.Pre, breaks = c(40-1, 80, 100))
+CNS.df$KPS.Pre_1 = factor(CNS.df$KPS.Pre_1, levels=c("(39,80]", "(80,100]"), 
+                          labels=c('Score <= 80','Score > 80'))
+
+```
+
+
+####KM Curves
+```{r}
+#KM survival curves for B3toDeath by GroupF
+CNS.km1 <- survfit(Surv(B3toDeath, Status)~ GroupF, data = CNS.df)
+plot(CNS.km1 , col = 1:2, , lty = 1:2, mark = '|', 
+     ylab = 'Survival probability', xlab = ' years')
+legend('topright', levels(CNS.df$GroupF), col = 1:2, lty = 1:2)
+title('Survival Curves by Group')
+```
+
+The survival probability for two groups are similiar at the very early time. After that the survival probability of no prior radiation group is higher than the prior radiation group. There are much more censored observations in no prior radiation group.
+
+
+```{r}
+#KM survival curves for B3toDeath by SexF
+CNS.km2 <- survfit(Surv(B3toDeath, Status)~  SexF, data = CNS.df)
+plot(CNS.km2 , col = 1:2, , lty = 1:2, mark = '|', ylab = 'Survival probability', xlab = ' years')
+legend('topright', levels(CNS.df$SexF), col = 1:2, lty = 1:2)
+title('Survival Curves by Sex')
+```
+
+The survival probability of female is higher than the survival probability of male.
+
+
+```{r}
+#KM survival curves for B3toDeath by LesSingF
+CNS.km3 <- survfit(Surv(B3toDeath, Status)~  LesSingF, data = CNS.df)
+plot(CNS.km3 , col = 1:2, , lty = 1:2, mark = '|', ylab = 'Survival probability', xlab = ' years')
+legend('topright', levels(CNS.df$LesSingF), col = 1:2, lty = 1:2)
+title('Survival Curves by LesSing')
+```
+
+The survival probability of single group is higher than the multiple group before 3.5 years. After that, the survival probability of single group keeps decrease. Both of them have many censored observation around 2 years.
+
+
+```{r}
+#KM survival curves for B3toDeath by LesDeepF
+CNS.km4 <- survfit(Surv(B3toDeath, Status)~  LesDeepF, data = CNS.df)
+plot(CNS.km4 , col = 1:2, , lty = 1:2, mark = '|', ylab = 'Survival probability', xlab = ' years')
+legend('topright', levels(CNS.df$LesDeepF), col = 1:2, lty = 1:2)
+title('Survival Curves by LesDeep')
+```
+
+The superfical group has higher survival probability than the deep group after 1 years. And the difference become larger until year 7.
+
+
+```{r}
+#KM survival curves for B3toDeath by LesSupF
+CNS.km5 <- survfit(Surv(B3toDeath, Status)~  LesSupF, data = CNS.df)
+plot(CNS.km5 , col = 1:3, , lty = 1:3, mark = '|', ylab = 'Survival probability', xlab = ' years')
+legend('topright', levels(CNS.df$LesSupF), col = 1:3, lty = 1:3)
+title('Survival Curves by LesSup')
+```
+
+The survival probability of Both group drops significantly at early years and remain stabled. The survival probability of Infra group reaches zero about 3.5 years. The Supra group have the similiar survival probability to Both group after 3.6 years. Many censored observations in Supra group.
+
+
+```{r}
+#KM survival curves for B3toDeath by Rad4000F
+CNS.km6 <- survfit(Surv(B3toDeath, Status)~  Rad4000F, data = CNS.df)
+plot(CNS.km6 , col = 1:2, , lty = 1:2, mark = '|', ylab = 'Survival probability', xlab = ' years')
+legend('topright', levels(CNS.df$Rad4000F), col = 1:2, lty = 1:2)
+title('Survival Curves by Rad4000')
+```
+
+The survival probability of radiation less than 4000 group is higher than the survival probability of radiation larger than 4000 group.Many censored observations in radiation less than 4000 group.
+
+
+```{r}
+#KM survival curves for B3toDeath by ProcF
+CNS.km7 <- survfit(Surv(B3toDeath, Status)~  ProcF, data = CNS.df)
+plot(CNS.km7 , col = 1:3, , lty = 1:3, mark = '|', ylab = 'Survival probability', xlab = ' years')
+legend('topright', levels(CNS.df$ProcF), col = 1:3, lty = 1:3)
+title('Survival Curves by Proc')
+```
+
+The survival probability of Other group are the highest until year 7.3 and drop to zero. The Subtotal resection group has higher survival probability then the Biopsy group after year 1. 
+
+
+```{r}
+#KM survival curves for B3toDeath by ChemoPriorF
+CNS.km8 <- survfit(Surv(B3toDeath, Status)~  ChemoPriorF, data = CNS.df)
+plot(CNS.km8 , col = 1:2, , lty = 1:2, mark = '|', ylab = 'Survival probability', xlab = ' years')
+legend('topright', levels(CNS.df$ChemoPriorF), col = 1:2, lty = 1:2)
+title('Survival Curves by ChemoPrior')
+```
+
+The survival probability of no ChemoPrior group is higher than the survival probability of ChemoPrior group after 3.7 years. Before that they have similiar survival probability.
+
+
+```{r}
+#KM survival curves for B3toDeath by AgeF
+CNS.km9 <- survfit(Surv(B3toDeath, Status)~ AgeF, data = CNS.df)
+plot(CNS.km9 , col = 1:2, , lty = 1:2, mark = '|', ylab = 'Survival probability', xlab = ' years')
+legend('topright', levels(CNS.df$AgeF), col = 1:2, lty = 1:2)
+title('Survival Curves by Age')
+```
+
+The survival probability of age <= 56.5 group is higher than the survival probability of age > 56.5 group.
+
+
+```{r}
+#KM survival curves for B3toDeath by KPS.PreF
+CNS.km10 <- survfit(Surv(B3toDeath, Status)~  KPS.Pre_1, data = CNS.df)
+plot(CNS.km10 , col = 1:2, , lty = 1:2, mark = '|', ylab = 'Survival probability', xlab = ' years')
+legend('topright', levels(CNS.df$KPS.Pre_1), col = 1:2, lty = 1:2)
+title('Survival Curves by KPS.Pre')
+```
+
+The survival probability of score > 80 group is higher than the survival probability of score <= 80 group.
+
+###(b) For each  reasonable covariate, compute the log-rank test p-value for homogeneity of survival curves. Comment.
+
+
+```{r}
+survdiff(Surv(B3toDeath, Status) ~ GroupF, data = CNS.df)
+```
+
+The P-value is 0.002, which is smaller than the significant value 0.05. Therefore, it has strong evidence to against the null hypothesis indicating that the survival curves for two groups are statistically significant difference over time.
+
+
+```{r}
+survdiff(Surv(B3toDeath, Status) ~ SexF, data = CNS.df)
+```
+
+The P-value is 0.3, which is larger than the significant value 0.05. Therefore, it has no evidence to against the null hypothesis indicating that the survival curves for two groups are not statistically significant difference over time.
+
+
+```{r}
+survdiff(Surv(B3toDeath, Status) ~ LesSingF, data = CNS.df)
+```
+
+The P-value is 0.8, which is larger than the significant value 0.05. Therefore, it has no evidence to against the null hypothesis indicating that the survival curves for two groups are not statistically significant difference over time.
+
+```{r}
+survdiff(Surv(B3toDeath, Status) ~ LesDeepF, data = CNS.df)
+```
+
+The P-value is 0.2, which is larger than the significant value 0.05. Therefore, it has no evidence to against the null hypothesis indicating that the survival curves for two groups are not statistically significant difference over time.
+
+```{r}
+survdiff(Surv(B3toDeath, Status) ~ LesSupF, data = CNS.df)
+```
+
+The P-value is 0.9, which is larger than the significant value 0.05. Therefore, it has no evidence to against the null hypothesis indicating that the survival curves for two groups are not statistically significant difference over time.
+
+```{r}
+survdiff(Surv(B3toDeath, Status) ~ Rad4000F, data = CNS.df)
+```
+
+The P-value is 0.03, which is smaller than the significant value 0.05. Therefore, it has strong evidence to against the null hypothesis indicating that the survival curves for two groups are statistically significant difference over time.
+
+```{r}
+survdiff(Surv(B3toDeath, Status) ~ ProcF, data = CNS.df)
+```
+
+The P-value is 0.3, which is larger than the significant value 0.05. Therefore, it has no evidence to against the null hypothesis indicating that the survival curves for two groups are not statistically significant difference over time.
+
+```{r}
+survdiff(Surv(B3toDeath, Status) ~ ChemoPriorF, data = CNS.df)
+```
+
+The P-value is 0.6, which is larger than the significant value 0.05. Therefore, it has no evidence to against the null hypothesis indicating that the survival curves for two groups are not statistically significant difference over time.
+
+```{r}
+survdiff(Surv(B3toDeath, Status) ~ AgeF, data = CNS.df)
+```
+
+The P-value is 0.07, which is larger than the significant value 0.05. Therefore, it has no evidence to against the null hypothesis indicating that the survival curves for two groups are not statistically significant difference over time.
+
+```{r}
+survdiff(Surv(B3toDeath, Status) ~ KPS.Pre_1, data = CNS.df)
+```
+
+The P-value is 9e-04, which is larger than the significant value 0.05. Therefore, it has no evidence to against the null hypothesis indicating that the survival curves for two groups are not statistically significant difference over time.
+
+Overall, Group, KPS.Pre, Rad4000F are the covariates that lead to statistically difference of survival curves.
+
+
+#3.  The purpose of this study is to determine which covariates best explain time from first chemotherapy to death.  
+
+###(a) Construct your 'best' Cox model using the variables above to address this purpose.  Comment on the model (the HR's, the p-values, the Rsquare, AIC and Concordance).  Explain the association of each of your variables with survival time.  (You may want to include an ANOVA table.)
+
+```{r CoxE}
+#Use step to identify a good AIC model
+
+#initial model
+result.groupF.coxph <- coxph(Surv(B3toDeath, Status) ~ GroupF, data=CNS.df)
+
+#use step to identify a good AIC model
+result.step <- step(result.groupF.coxph, scope=list(upper = ~ GroupF+Age+SexF+KPS.Pre+LesSingF+
+                                                    LesDeepF+LesSupF+Rad4000F+ProcF+ChemoPriorF
+                                                     , lower = ~ GroupF))
+
+summary(result.step)
+
+AIC(result.step)
+```
+
+The model using step AIC comes out the result GroupF + KPS.Pre + SexF + Age + ChemoPriorF + Rad4000F is the best model. However, we find that the p-value of Rad4000Yes is 0.11559, which is larger than our significant value 0.05. Therefore, we need to remove the covariate Rad4000F. We need to construct the new model.
+
+
+```{r}
+#Remove the insignificant covariate variables Rad4000F to get the new best Cox model
+result.final.coxph <- coxph(Surv(B3toDeath, Status) ~ GroupF + KPS.Pre + 
+    SexF + Age + ChemoPriorF, data=CNS.df)
+
+#Summary of the new best model
+summary(result.final.coxph)
+
+AIC(result.final.coxph)
+
+anova(result.final.coxph)
+```
+
+This final model looks good and simple with 5 covariates. Compared to the model with step AIC, the AIC values are almost the same and also the value of R square and concordance are almost no difference. The concordance of the final model is 0.772, which is good. The value of R square of the final model is 0.375.
+
+The hazard for prior radiation is 2.1850 times the hazard for no prior radiation, given other variables in model held fixed.
+Risk of death increases by a factor of 0.9630 for each additional unit in KPS.Pre, all other variables fixed. The hazard for female is 0.2386 times the hazard for male, given other variables in model held fixed. Risk of death increases by a factor of 1.0319 for each additional unit in Age, all other variables fixed. The hazard for ChemoPriorYes is 2.7948 times the hazard for ChemoPriorNo, given other variables in model held fixed.
+
+
+###(b)  Check the functional form of the continuous covariates in your model using Martingale residuals.  Comment.
+
+Two continuous covariates in my final model - Age and KPS.Pre
+
+```{r Martingale}
+
+smoothSEcurve <- function(yy, xx) {
+  # use after a call to "plot"
+  # fit a lowess curve and 95% confidence interval curve
+  xx.list <- min(xx) + ((0:100)/100)*(max(xx) - min(xx)) # make list of x values
+
+  # Then fit loess function through the points (xx, yy) at the listed values
+  yy.xx <- predict(loess(yy ~ xx), se=T, newdata=data.frame(xx=xx.list))
+
+  lines(yy.xx$fit ~ xx.list, lwd=2)
+  lines(yy.xx$fit - qt(0.975, yy.xx$df)*yy.xx$se.fit ~ xx.list, lty=2)
+  lines(yy.xx$fit + qt(0.975, yy.xx$df)*yy.xx$se.fit ~ xx.list, lty=2)
+  }
+
+par(mfrow = c(1,2))
+
+rr.final <- residuals(result.final.coxph, type = "martingale")
+
+plot(rr.final ~ Age, data = CNS.df)
+smoothSEcurve(rr.final, CNS.df$Age)
+title("Martingale residuals\nversus age")
+
+plot(rr.final ~ KPS.Pre, data = CNS.df)
+smoothSEcurve(rr.final, CNS.df$KPS.Pre)
+title("Martingale residuals\nversus KPS.Pre")
+```
+
+They look good and not any unusual shows. They both look linear.
+
+
+###(c)  Check for unusual (poorly predicted) observations using Deviance residuals.  Comment.
+
+```{r Deviance}
+plot(residuals(result.final.coxph, type = "deviance"))
+abline(h = 0)
+title('Deviance Residuals for Final Model')
+```
+
+The residuals are symmetrically distributed about 0, whichs is good. No shape patterns are noticeable. 
+
+
+###(d)  Check for influential observations using the dfbetas residuals.  Comment.
+```{r dfbetas}
+n.obs <- nrow(CNS.df)
+index.obs <- 1:n.obs
+
+par(mfrow = c(2,3))
+
+
+resid.dfbeta <- residuals(result.final.coxph, type = 'dfbeta')
+plot(resid.dfbeta[,1]~index.obs , type = 'h', xlab = 'Observation', ylab = 'Change in Coefficient')
+abline(h=0)
+title('Approximate change in coefficient\nfor Group')
+
+resid.dfbeta <- residuals(result.final.coxph, type = 'dfbeta')
+plot(resid.dfbeta[,2]~index.obs , type = 'h', xlab = 'Observation', ylab = 'Change in Coefficient')
+abline(h=0)
+title('Approximate change in coefficient\nfor KPS.Pre')
+
+resid.dfbeta <- residuals(result.final.coxph, type = 'dfbeta')
+plot(resid.dfbeta[,3]~index.obs , type = 'h', xlab = 'Observation', ylab = 'Change in Coefficient')
+abline(h=0)
+title('Approximate change in coefficient\nfor Sex')
+
+resid.dfbeta <- residuals(result.final.coxph, type = 'dfbeta')
+plot(resid.dfbeta[,4]~index.obs , type = 'h', xlab = 'Observation', ylab = 'Change in Coefficient')
+abline(h=0)
+title('Approximate change in coefficient\nfor Age')
+
+resid.dfbeta <- residuals(result.final.coxph, type = 'dfbeta')
+plot(resid.dfbeta[,5]~index.obs , type = 'h', xlab = 'Observation', ylab = 'Change in Coefficient')
+abline(h=0)
+title('Approximate change in coefficient\nfor ChemoPrior')
+
+
+```
+
+There are about 5 observations for Group that change the estimate of the Group coefficient by more than 10% value of the coefficent. These are the influential observations. 
+
+There is about 1 observations for KPS.Pre that change the estimate of the KPS.Pre coefficient by more than 10% value of the coefficent. This is the influential observation. 
+
+There are about 3 observations for Sex that change the estimate of the Sex coefficient by more than 10% value of the coefficent. These are the influential observations. 
+
+There are about 5 observations for Age that change the estimate of the Age coefficient by more than 10% value of the coefficent. These are the influential observations. 
+
+There are about 6 observations for ChemoPrior that change the estimate of the ChemoPrior coefficient by more than 10% value of the coefficent. These are the influential observations. 
+
+We may check these data points to ensure that there are no errors in recording the data.
+
+
+###(e)  Check the proportional hazards assumption of your model.  Comment.
+
+```{r prophaz}
+result.sch.result <- cox.zph(result.final.coxph, transform = "km")
+result.sch.result
+
+par(mfrow = c(2,3))
+plot(result.sch.result)
+```
+
+The P-value of all covariates are both much larger than our significant value 0.05. Therefore, we have no evidence to reject the null hypothesis. Therefore, proportional hazard assumptions are valid. 
+
+
+###(f)  Generate a Forest plot for your model using the hazard ratios and an appropriate zero line. (See also Appendix A.3 of text for more information.)
+
+```{r forest}
+coef.est <- c(NA, 0, 2.1850, NA, NA, 0.9630, NA, NA, 0, 0.2386, 
+              NA, NA, 1.0319, NA, NA, 0, 2.7948)
+se.est <- c(NA, 0, 0.40771, NA, NA, 0.01162, NA, NA, 0, 0.49014, 
+            NA, NA, 0.01494, NA, NA, 0, 0.49628)
+lower <- coef.est - 1.96*se.est
+upper <- coef.est + 1.96*se.est
+
+label.factors <- c("Radiation Group", "No Prior Radiation", "Prior Radiation", "",
+                   "", "KPS.Pre", "", 
+                   "Sex", "Male", "Female", "",
+                   "", "Age", "", 
+                   "ChemoPrior", "No", "Yes")
+
+library(forestplot)
+
+forestplot(label.factors, coef.est, lower, upper, zero = 0, cex = 1.0,
+           lineheight = "auto", xlab = "Hazard ratio", boxsize = 0.4,
+           xticks=c(-4,-3.5,-3,-2.5,-2,-1.5,-1.0,-0.5,0,0.5,1,1.5,2,2.5,3,3.5,4),
+           txt_gp = fpTxtGp(label=gpar(cex=1.3)),
+           new_page = T)
+
+```
+
+#4.  [Graduate students; Undergraduates for bonus credit] Research a topic related to the course.
+
+Pick a topic from the list below and email me the topic,  Research the topic,  Write at least a one page INTRODUCTION to the topic.  Give a short 10 minute presentation on your topic in class.
+
+1. B-splines
+2. psplines = penalized splines (see section 6.5)
+3. loess curve (see section 7.1)
+4. Kruskal-Wallis one-way analysis of variance test
+5. Fisher's exact test
+6. Counting processes approach to survival analysis (see Introduction in *Survival and Event History Analysis*
+ book linked on CourseSpaces)
+
+
+
+
+
