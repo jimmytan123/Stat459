@@ -1,0 +1,130 @@
+---
+title: "Stat459 Assignment 3"
+author: "Zhixi Tan V00821283"
+
+output:
+  pdf_document:
+    toc: yes
+  html_document:
+    number_sections: yes
+    toc: yes
+  word_document:
+    toc: yes
+---
+
+```{r}
+knitr::opts_chunk$set(echo = TRUE, fig.height=5, fig.width=6.5)
+```
+
+```{r}
+library(survival)
+library(asaur)
+library(numDeriv)
+library(rms)
+library(tableone)
+```
+
+#Read the data and compute the table 1 (part a)
+```{r}
+CNS.df <- read.csv("CNS.csv")
+
+#add factor variables for the categorical covariates
+CNS.df$GroupF <- factor(CNS.df$Group, labels=c('no prior radiation','prior radiation'))
+CNS.df$SexF <- factor(CNS.df$Sex, labels=c('male','female'))
+CNS.df$StatusF <- factor(CNS.df$Status, labels=c('alive','death'))
+CNS.df$LesSingF <- factor(CNS.df$LesSing, labels=c('Single','multiple'))
+CNS.df$LesDeepF <- factor(CNS.df$LesDeep, labels=c('superficial','deep'))
+CNS.df$LesSupF <- factor(CNS.df$LesSup, labels=c('supra','infra','both'))
+CNS.df$Rad4000F <- factor(CNS.df$Rad4000, labels=c('Radiation <= 4000','Radiation > 4000'))
+CNS.df$ProcF <- factor(CNS.df$Proc, labels=c('subtotal resection','biopsy', 'other'))
+CNS.df$ChemoPriorF <- factor(CNS.df$ChemoPrior, labels=c('no','yes'))
+CNS.df$ResponseF <- factor(CNS.df$Response, labels=c('complete','partial'))
+
+
+
+CNSvars <- names(CNS.df)
+CNSvars <- CNSvars[!is.element(CNSvars, c('PtNumber','Group','GroupF', 'Sex', 'Status',
+                                          'LesSing', 'LesDeep', 'LesSup',
+                                          'Rad4000','Proc','ChemoPrior',
+                                          'Response'))]
+CNSvars
+
+#Create the table 1
+print(CreateTableOne(CNSvars, c('GroupF'), data=CNS.df),
+         showAllLevels=TRUE)
+```
+
+#KM curves for DXtoDeath for the two Group types(part d)
+```{r}
+plot(survfit(Surv(DxtoDeath, Status) ~ GroupF, data = CNS.df), col = 1:2, , lty = 1:2, mark = '|', 
+     ylab = 'Survival probability', xlab = ' years')
+title('Survival probabilities for two types of Group')
+legend('topright', c('no prior radiation', 'prior radiation'), col = 1:2, lty = 1:2, bty = 'n')
+
+
+```
+
+#Log-rank test for the equality of survival curves for DxtoDeath for two Group types (part e)
+```{r}
+survdiff(Surv(DxtoDeath, Status) ~ GroupF, data = CNS.df)
+```
+
+#Cox model 1 testing difference bewtween hazards of death for Group 1 verus Group 0 (part f)
+```{r}
+CNS.cox1 <- coxph(Surv(DxtoDeath,Status) ~ GroupF, data=CNS.df)
+summary(CNS.cox1)
+AIC(CNS.cox1)
+
+
+```
+
+#Cox model 2 (adjusting the model for variable ChemoPrior) testing difference bewtween hazards of death for Group 1 verus Group 0 (part g)
+```{r}
+CNS.cox2 <- coxph(Surv(DxtoDeath,Status) ~ GroupF + ChemoPriorF, data=CNS.df)
+summary(CNS.cox2)
+AIC(CNS.cox2)
+```
+
+#Table for Rsquare, AIC and Concordance for two Cox models (part h)
+```{r}
+com.table <- matrix(c(0.053,0.075,243.3025,
+                      243.9766,0.561,0.583), ncol = 3)
+rownames(com.table) <- c('model1','model2')
+colnames(com.table) <- c('Rsquare','AIC','Concordance')
+com.table <- as.table(com.table)
+com.table
+
+```
+
+
+
+
+
+
+
+(a)
+The number of patients for no prior radiation group and prior group is not equal. More males are in the study than the females. The group that receive prior radiation are much more probability to death. For radiation greater than 4000, there is no people in no prior radiation group. All of the people in no prior radiation group are in radiation less or equal than 400. For people who in prior radiation group, most of them are radiation greater than 4000. 
+P-value for DxtoB3 is small which indicates that the time from diagnosis to chemotherapy exists significant difference between two groups. P-value for SexF is large, which indicates that there exist equal proportions for SexF and two groups. P-value for StatusF and Rad4000F is really small, indicates that there exist not equal proportions for each population in two groups.
+
+(b)	
+The Pearson’s chi-square test of homogeneity is the test for equal proportions. Specifically, this tests determine whether two or more populations have the same proportion or distribution within the single categorical variable.  The null hypothesis is the proportion of individuals in each categories is the same in all populations. In this test, sample data are randomly selected and the individual observations must be independent. 
+In our Sex example, the null hypothesis is that the two gender have the same proportion in each group category (no prior and prior). The p-value is 0.976 which is lager than the significant value 0.05. Therefore, it concludes that two groups are homogeneous with respect to Sex.
+
+(c)
+The two-sample t-test is the test for whether there exists mean difference between two independent samples. In our case, we want determine whether the means are equals. The null hypothesis is that there is no difference in mean for two populations. It follows the test statistics T. 
+In our Age example, the null hypothesis is that the mean of age in group combination is equal to the mean of age in group patchOnly. The p-value is 0.157 which is lager than the significant value 0.05. Therefore, it concludes that the mean age does not have a statistically different within two different groups.
+
+(d)  
+Overall, the survival probability for prior radiation is smaller than the no prior radiation group. The survival probability for no prior radiation group and prior radiation group are similar at the early times. The survival probability of prior radiation reaches zero at the end. There are some large censored times for no prior radiation group.
+
+(e)
+The p-value for the test is 0.07, which is larger than the significant value 0.05. Therefore, it has no evidence to against the null hypothesis indicating that the survival curves for two groups are not statistically significant difference over time.
+
+(f)
+The hazard for prior radiation is 1.852 times the hazard for no prior radiation. It means the hazard for prior radiation is larger. However, the p-value is 0.0704 larger than the significant value 0.05 and the confidence interval for the hazard ratio (0.9501, 3.6110) includes 1. It has no evidence to against the null hypothesis. Hence, it indicates that there is no statistically significant difference for the hazards of death between two groups.
+
+(g)
+The hazard for prior radiation is 2.1730 times the hazard for no prior radiation, given other variables in model held fixed. It means the hazard for prior radiation is larger. The p-value is 0.0335 smaller than the significant value 0.05 and the confidence interval for the hazard ratio (1.0626, 4.444) does not includes 1. It has strong evidence to against the null hypothesis. Hence, it indicates that there is statistically significant difference for the hazards of death between two groups given the variable ChemoPriorF in the model. For the variable ChemoPriorF, p-value is very large indicates that it is not a significant variable for the model. 
+
+(h)
+The value of R-square and the concordance both larger for model 2 compare to the model 1. The AIC value for two model are pretty similar. Model 1 has a slightly small value of AIC. Overall, model 2 is preferred. 
