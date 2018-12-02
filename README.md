@@ -1,1 +1,1 @@
-"# Stat459 - survival analysis resources" 
+Stat459 - survival analysis resources
